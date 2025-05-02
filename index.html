@@ -114,6 +114,10 @@
       renderer.xr.enabled = true;
       renderer.setClearColor(0x000000, 0);
       renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       document.body.appendChild(renderer.domElement);
 
       const ambientLight = new THREE.AmbientLight(0x404040, 2);
@@ -121,6 +125,10 @@
 
       const directionalLight = new THREE.DirectionalLight(0xffffff, 1.8);
       directionalLight.position.set(1, 1.5, 1);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.set(1024, 1024);
+      directionalLight.shadow.camera.near = 0.1;
+      directionalLight.shadow.camera.far = 20;
       scene.add(directionalLight);
       
       const pointLight1 = new THREE.PointLight(0x64acff, 2, 5);
@@ -133,25 +141,6 @@
 
       document.getElementById('start-button').addEventListener('click', startARSession);
       window.addEventListener('resize', onWindowResize);
-    }
-
-    function updateStatus(message) {
-      const el = document.getElementById('status');
-      el.style.display = 'block';
-      el.textContent = message;
-    }
-
-    function updateScore(newScore) {
-      score = newScore;
-      const el = document.getElementById('score-display');
-      el.style.display = 'block';
-      el.textContent = `Score: ${score}`;
-    }
-
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function startARSession() {
@@ -171,6 +160,25 @@
       } else {
         updateStatus('WebXR is not supported in this browser.');
       }
+    }
+
+    function updateStatus(message) {
+      const el = document.getElementById('status');
+      el.style.display = 'block';
+      el.textContent = message;
+    }
+
+    function updateScore(newScore) {
+      score = newScore;
+      const el = document.getElementById('score-display');
+      el.style.display = 'block';
+      el.textContent = `Score: ${score}`;
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function onSessionStarted(session) {
@@ -211,26 +219,25 @@
     }
 
     function createGameEnvironment() {
-      // Simple box for ground
       const gGeom = new THREE.BoxGeometry(1.5, 0.02, 10);
-      const gMat = new THREE.MeshBasicMaterial({
+      const gMat = new THREE.MeshLambertMaterial({
         color: 0x203a55,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.8
       });
       ground = new THREE.Mesh(gGeom, gMat);
       ground.position.set(0, -0.1, -5);
+      ground.receiveShadow = true;
       scene.add(ground);
       envObjects.push(ground);
 
-      // Simple lanes
       for (let i = 0; i < 3; i++) {
         const lm = new THREE.Mesh(
           new THREE.BoxGeometry(0.03, 0.03, 10),
           new THREE.MeshBasicMaterial({
             color: 0xffffff,
-            transparent: true,
-            opacity: 0.7
+            emissive: 0x3a70ff,
+            emissiveIntensity: 0.5
           })
         );
         lm.position.set((i - 1) * 0.4, -0.08, -5);
@@ -238,57 +245,65 @@
         envObjects.push(lm);
       }
 
-      // Simple decorative crystals
       for (let i = 0; i < 16; i++) {
-        const size = 0.03 + Math.random() * 0.06;
-        const color = crystalColors[Math.floor(Math.random() * crystalColors.length)];
+        const size = 0.03 + Math.random()*0.06;
+        const color = crystalColors[Math.floor(Math.random()*crystalColors.length)];
         const crys = createSimpleCrystal(size, color);
-        const side = Math.random() > 0.5 ? 1 : -1;
-        crys.position.set(side * 0.6 + (Math.random() * 0.2 * side), -0.08 + size/2, -2 - i * 0.6);
-        crys.rotation.y = Math.random() * Math.PI * 2;
+        const side = Math.random()>0.5?1:-1;
+        crys.position.set(side*0.6 + (Math.random()*0.2*side), -0.08 + size/2, -2 - i*0.6);
+        crys.rotation.y = Math.random()*Math.PI*2;
+        crys.rotation.z = Math.random()*0.3;
         scene.add(crys);
         envObjects.push(crys);
       }
     }
 
     function createSimpleCrystal(size, color) {
-      // Using simple tetrahedron for crystals
-      const geom = new THREE.TetrahedronGeometry(size);
-      const mat = new THREE.MeshBasicMaterial({
+      // Use simple box geometry instead of complex geometry
+      const geom = new THREE.BoxGeometry(size, size*1.5, size);
+      const mat = new THREE.MeshLambertMaterial({
         color: color,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.7,
+        emissive: color,
+        emissiveIntensity: 0.3
       });
-      return new THREE.Mesh(geom, mat);
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
     }
 
     function createPlayer() {
-      // Create a soap bubble player using a simple sphere
       const grp = new THREE.Group();
       
-      // Outer bubble shell
-      const sphereGeom = new THREE.SphereGeometry(0.1, 16, 16);
-      const bubbleMat = new THREE.MeshBasicMaterial({
+      // Create a soap bubble effect using a sphere with simple materials
+      const geom = new THREE.SphereGeometry(0.1, 16, 16);
+      const mat = new THREE.MeshBasicMaterial({
         color: 0x4876ff,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.5
       });
-      const bubble = new THREE.Mesh(sphereGeom, bubbleMat);
-      grp.add(bubble);
       
-      // Inner bubble shell for depth effect
-      const innerSphereGeom = new THREE.SphereGeometry(0.08, 12, 12);
-      const innerBubbleMat = new THREE.MeshBasicMaterial({
-        color: 0x64acff,
+      // Add an outer shell for the bubble effect
+      const outerGeom = new THREE.SphereGeometry(0.11, 16, 16);
+      const outerMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
         transparent: true,
-        opacity: 0.2
+        opacity: 0.2,
+        side: THREE.BackSide
       });
-      const innerBubble = new THREE.Mesh(innerSphereGeom, innerBubbleMat);
-      grp.add(innerBubble);
       
-      // Add a point light to make it glow
-      const bubbleLight = new THREE.PointLight(0x4876ff, 1.5, 0.3);
-      grp.add(bubbleLight);
+      const mesh = new THREE.Mesh(geom, mat);
+      const outerMesh = new THREE.Mesh(outerGeom, outerMat);
+      
+      mesh.castShadow = true;
+      grp.add(mesh);
+      grp.add(outerMesh);
+      
+      // Add a point light for glow effect
+      const light = new THREE.PointLight(0x4876ff, 1.5, 0.3);
+      grp.add(light);
       
       grp.position.set(lanePositions[playerLane], 0, -1);
       player = grp;
@@ -296,17 +311,16 @@
     }
 
     function createParticleSystem() {
-      // Simple particle system
       for (let i = 0; i < 50; i++) {
         const p = new THREE.Mesh(
-          new THREE.SphereGeometry(0.01 + Math.random() * 0.02, 8, 8),
+          new THREE.SphereGeometry(0.01 + Math.random()*0.02, 8, 8),
           new THREE.MeshBasicMaterial({
-            color: crystalColors[Math.floor(Math.random() * crystalColors.length)],
+            color: crystalColors[Math.floor(Math.random()*crystalColors.length)],
             transparent: true,
             opacity: 0.6
           })
         );
-        p.position.set((Math.random() - 0.5) * 2, Math.random() * 0.5, -Math.random() * 10);
+        p.position.set((Math.random()-0.5)*2, Math.random()*0.5, -Math.random()*10);
         scene.add(p);
         particles.push(p);
       }
@@ -316,38 +330,44 @@
       controller = renderer.xr.getController(0);
       controller.addEventListener('connected', e => updateStatus(`Controller connected: ${e.data.handedness}. Rotate to change lanes!`));
       scene.add(controller);
-      
-      // Simple controller visualization
       const cg = new THREE.Group();
       const geom = new THREE.CylinderGeometry(0.01, 0.02, 0.1, 16);
       const mat = new THREE.MeshBasicMaterial({
-        color: 0xff4500
+        color: 0xff4500,
+        emissive: 0xff2000,
+        emissiveIntensity: 0.3
       });
       const cm = new THREE.Mesh(geom, mat);
       cm.rotation.x = Math.PI/2;
       cg.add(cm);
+      cg.add(new THREE.PointLight(0xff4500, 1.5, 0.3));
       controller.add(cg);
     }
 
     function spawnObstacle() {
-      const lane = Math.floor(Math.random() * 3);
+      const lane = Math.floor(Math.random()*3);
       const grp = new THREE.Group();
+      const color = crystalColors[Math.floor(Math.random()*crystalColors.length)];
       
-      // Use a simple cube for obstacles
-      const color = crystalColors[Math.floor(Math.random() * crystalColors.length)];
+      // Use simple geometry that works better in AR
       const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-      const material = new THREE.MeshBasicMaterial({
+      
+      // Use simpler material
+      const mat = new THREE.MeshLambertMaterial({
         color: color,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.7,
+        emissive: color,
+        emissiveIntensity: 0.3
       });
       
-      const mesh = new THREE.Mesh(geometry, material);
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.castShadow = true;
       grp.add(mesh);
       
-      // Simple light inside obstacle
-      const obstacleLight = new THREE.PointLight(color, 1, 0.3);
-      grp.add(obstacleLight);
+      // Add inner glow effect
+      const innerLight = new THREE.PointLight(color, 1.5, 0.4);
+      grp.add(innerLight);
       
       grp.position.set(lanePositions[lane], 0, -10);
       grp.userData = { isObstacle: true, lane };
@@ -356,18 +376,20 @@
     }
 
     function checkCollisions() {
-      for (let i = obstacles.length - 1; i >= 0; i--) {
+      for (let i = obstacles.length-1; i>=0; i--) {
         const o = obstacles[i];
         if (player.position.distanceTo(o.position) < 0.25) {
           updateStatus('Collision! Game over.');
           isPlaying = false;
           createExplosionEffect(player.position);
-          
-          // Change player color to red on collision
-          player.children[0].material.color.set(0xff0000);
-          player.children[1].material.color.set(0xff0000);
-          player.children[2].color.set(0xff0000);
-          
+          // Change player appearance on collision
+          if (player.children[0].material) {
+            player.children[0].material.color.set(0xff0000);
+            player.children[0].material.opacity = 0.8;
+            if (player.children[2] && player.children[2].color) {
+              player.children[2].color.set(0xff0000);
+            }
+          }
           setTimeout(resetGame, 2000);
           return true;
         }
@@ -376,30 +398,17 @@
     }
 
     function createExplosionEffect(pos) {
-      // Simple explosion effect using spheres
-      for (let i = 0; i < 20; i++) {
-        const p = new THREE.Mesh(
-          new THREE.SphereGeometry(0.03, 8, 8),
-          new THREE.MeshBasicMaterial({ 
-            color: 0xff5500, 
-            transparent: true, 
-            opacity: 0.8 
-          })
-        );
+      for (let i=0; i<20; i++) {
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 }));
         p.position.copy(pos);
         p.userData = {
-          velocity: new THREE.Vector3(
-            (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1
-          ),
+          velocity: new THREE.Vector3((Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1),
           life: 1.0
         };
         scene.add(p);
         trailParticles.push(p);
       }
-      
-      // Flash effect
       const flash = new THREE.PointLight(0xffffff, 3, 1.5);
       flash.position.copy(pos);
       scene.add(flash);
@@ -413,10 +422,14 @@
       isPlaying = true;
       player.position.set(lanePositions[playerLane], 0, -1);
       
-      // Reset player colors
-      player.children[0].material.color.set(0x4876ff);
-      player.children[1].material.color.set(0x64acff);
-      player.children[2].color.set(0x4876ff);
+      // Reset player appearance
+      if (player.children[0].material) {
+        player.children[0].material.color.set(0x4876ff);
+        player.children[0].material.opacity = 0.5;
+        if (player.children[2] && player.children[2].color) {
+          player.children[2].color.set(0x4876ff);
+        }
+      }
       
       obstacles.forEach(o => scene.remove(o));
       obstacles = [];
@@ -430,49 +443,35 @@
       const rot = new THREE.Euler().setFromQuaternion(controller.quaternion);
       const d = rot.z - lastControllerRotation.z;
       if (Math.abs(d) > 0.1) {
-        playerLane = d > 0 ? Math.min(playerLane + 1, 2) : Math.max(playerLane - 1, 0);
-        updateStatus(`Changed to ${['left', 'center', 'right'][playerLane]} lane`);
+        playerLane = d > 0 ? Math.min(playerLane+1, 2) : Math.max(playerLane-1, 0);
+        updateStatus(`Changed to ${['left','center','right'][playerLane]} lane`);
         createTrailEffect(player.position, 10);
       }
-      
-      // Smooth player movement
       const tx = lanePositions[playerLane];
-      player.position.x += (tx - player.position.x) * 0.2;
-      player.position.y = Math.sin(clock.getElapsedTime() * 3) * 0.02;
-      player.rotation.y += (tx - player.position.x) * 0.1;
-      
-      // Bubble wobble effect
-      player.children[0].scale.set(
-        1 + Math.sin(clock.getElapsedTime() * 5) * 0.03,
-        1 + Math.cos(clock.getElapsedTime() * 6) * 0.03,
-        1 + Math.sin(clock.getElapsedTime() * 7) * 0.03
-      );
-      
+      player.position.x += (tx-player.position.x)*0.2;
+      player.position.y = Math.sin(clock.getElapsedTime()*3)*0.02;
+      player.rotation.y += (tx-player.position.x)*0.1;
+      player.rotation.z = (tx-player.position.x)*0.3;
       lastControllerRotation.copy(rot);
+      
+      // Add subtle rotation for bubble effect
+      player.children[0].rotation.x += 0.01;
+      player.children[0].rotation.y += 0.015;
+      player.children[1].rotation.x -= 0.005;
+      player.children[1].rotation.y -= 0.008;
     }
 
     function createTrailEffect(pos, count) {
-      // Simple trail particles
-      for (let i = 0; i < count; i++) {
-        const p = new THREE.Mesh(
-          new THREE.SphereGeometry(0.01 + Math.random() * 0.02, 8, 8),
-          new THREE.MeshBasicMaterial({ 
-            color: 0x64acff, 
-            transparent: true, 
-            opacity: 0.7 
-          })
-        );
+      for (let i=0; i<count; i++) {
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.01+Math.random()*0.02, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0x64acff, transparent: true, opacity: 0.7 }));
         p.position.copy(pos);
-        p.position.x += (Math.random() - 0.5) * 0.1;
-        p.position.y += (Math.random() - 0.5) * 0.1;
-        p.position.z += (Math.random() - 0.5) * 0.1;
+        p.position.x += (Math.random()-0.5)*0.1;
+        p.position.y += (Math.random()-0.5)*0.1;
+        p.position.z += (Math.random()-0.5)*0.1;
         p.userData = {
-          velocity: new THREE.Vector3(
-            (Math.random() - 0.5) * 0.03,
-            Math.random() * 0.03,
-            (Math.random() - 0.5) * 0.03
-          ),
-          life: 0.7 + Math.random() * 0.3
+          velocity: new THREE.Vector3((Math.random()-0.5)*0.03, Math.random()*0.03, (Math.random()-0.5)*0.03),
+          life: 0.7+Math.random()*0.3
         };
         scene.add(p);
         trailParticles.push(p);
@@ -480,29 +479,25 @@
     }
 
     function updateObstacles(dt) {
-      for (let i = obstacles.length - 1; i >= 0; i--) {
+      for (let i=obstacles.length-1; i>=0; i--) {
         const o = obstacles[i];
-        o.position.z += gameSpeed * dt;
+        o.position.z += gameSpeed*dt;
         
-        // Simple rotation for obstacles
-        o.rotation.x += dt * 0.5;
-        o.rotation.y += dt * 0.8;
+        // Simple rotation for visual interest without complex calculations
+        o.rotation.x += dt*0.5;
+        o.rotation.y += dt*0.8;
         
         if (o.position.z > 0) {
           scene.remove(o);
           obstacles.splice(i, 1);
-          updateScore(score + 10);
+          updateScore(score+10);
           gameSpeed += 0.05;
-          
-          // Success flash
           const flash = new THREE.PointLight(0x00ff00, 1, 1);
           flash.position.set(o.position.x, o.position.y, 0);
           scene.add(flash);
           setTimeout(() => scene.remove(flash), 300);
         }
       }
-      
-      // Spawn new obstacles
       if (clock.getElapsedTime() - lastSpawnTime > spawnInterval) {
         spawnObstacle();
         lastSpawnTime = clock.getElapsedTime();
@@ -511,18 +506,15 @@
     }
 
     function updateParticles(dt) {
-      // Update background particles
       particles.forEach(p => {
-        p.position.y -= dt * 0.2;
+        p.position.y -= dt*0.2;
         if (p.position.y < -0.2) {
           p.position.y = 0.5;
-          p.position.z = -Math.random() * 10;
-          p.position.x = (Math.random() - 0.5) * 2;
+          p.position.z = -Math.random()*10;
+          p.position.x = (Math.random()-0.5)*2;
         }
       });
-      
-      // Update trail particles
-      for (let i = trailParticles.length - 1; i >= 0; i--) {
+      for (let i=trailParticles.length-1; i>=0; i--) {
         const p = trailParticles[i];
         p.position.add(p.userData.velocity);
         p.userData.life -= dt;
@@ -540,10 +532,7 @@
         handleControllerRotation();
         updateObstacles(dt);
         updateParticles(dt);
-        
-        // Add occasional trail particles
         if (Math.random() < 0.05) createTrailEffect(player.position, 1);
-        
         checkCollisions();
       }
       renderer.render(scene, camera);
